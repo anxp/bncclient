@@ -8,6 +8,19 @@ import (
 func main()  {
 	client := bncclient.NewBinanceClient("PUT YOUR PUBLIC API KEY HERE")
 
+	fmt.Println("======= SERVER TIME EXAMPLE OUTPUT ==================================")
+	serverTime, statusCode, retryAfter, err := client.GetServerTime()
+
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	fmt.Println("ServerTime (Timestamp): ", serverTime)
+	fmt.Println("Status Code: ", statusCode)
+	fmt.Println("Retry After: ", retryAfter)
+	fmt.Println("=====================================================================")
+
 	fmt.Println("======= AGGREGATED TRADES EXAMPLE OUTPUT ============================")
 	limit := 4 // We'll get only 4 most recent aggregated trades
 

@@ -54,6 +54,27 @@ func NewBinanceClient(apiKey string) *BinanceClient {
 	}
 }
 
+func (bc *BinanceClient) GetServerTime() (int64, int, int, error) {
+	type ServerTimeIntermediateFormat struct {
+		ServerTime int64 `json:"serverTime"`
+	}
+
+	var timestampTmp ServerTimeIntermediateFormat
+
+	timestampRaw, statusCode, retryAfter, err := makeApiRequest("/api/v3/time", bc.apiKey, map[string]string{})
+
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
+	// Try to parse JSON and return error if it is:
+	if err := json.Unmarshal(timestampRaw, &timestampTmp); err != nil {
+		return 0, 0, 0, err
+	}
+
+	return timestampTmp.ServerTime, statusCode, retryAfter, nil
+}
+
 // GetOrderBook - gets order book. Valid values for limit: [5, 10, 20, 50, 100, 500, 1000, 5000]
 // Details: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#order-book
 func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int, int, error) {
