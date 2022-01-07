@@ -2,6 +2,7 @@ package bncclient
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -47,6 +48,11 @@ type OrderBook struct {
 
 type TradesList []oneTrade
 type AggTradesList []aggTrades
+
+type binanceError struct {
+	Code int 	`json:"code"`
+	Msg  string `json:"msg"`
+}
 
 func NewBinanceClient(apiKey string) *BinanceClient {
 	return &BinanceClient{
@@ -112,7 +118,7 @@ func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int,
 	}
 
 	// Try to parse JSON and return error if it is:
-	if err := json.Unmarshal(orderBookRaw, &orderBookTmp); err != nil {
+	if err := tryParseResponse(orderBookRaw, &orderBookTmp); err != nil {
 		return OrderBook{}, 0, 0, err
 	}
 
@@ -161,7 +167,7 @@ func (bc *BinanceClient) GetRecentTrades(symbol string, limit int) (TradesList, 
 	}
 
 	// Try to parse JSON and return error if it is:
-	if err := json.Unmarshal(recentTradesRaw, &recentTrades); err != nil {
+	if err := tryParseResponse(recentTradesRaw, &recentTrades); err != nil {
 		return nil, 0, 0, err
 	}
 
@@ -190,7 +196,7 @@ func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId in
 		return nil, 0, 0, err
 	}
 
-	if err := json.Unmarshal(historicalTradesRaw, &historicalTrades); err != nil {
+	if err := tryParseResponse(historicalTradesRaw, &historicalTrades); err != nil {
 		return nil, 0, 0, err
 	}
 
@@ -228,7 +234,7 @@ func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startT
 		return nil, 0, 0, err
 	}
 
-	if err := json.Unmarshal(aggTradesRaw, &aggTrades); err != nil {
+	if err := tryParseResponse(aggTradesRaw, &aggTrades); err != nil {
 		return nil, 0, 0, err
 	}
 
@@ -275,4 +281,34 @@ func makeApiRequest(path string, apiKey string, queryParams map[string]string) (
 	retryAfter, _ := strconv.Atoi(rawResponse.Header.Get("Retry-After"))
 
 	return bodyBytes, rawResponse.StatusCode, retryAfter, nil
+}
+
+func tryParseResponse(rawResponse []byte, structureToParseTo interface{}) error {
+
+	var binanceErr binanceError
+
+	if err := json.Unmarshal(rawResponse, structureToParseTo); err != nil { // FIRST PARSE ATTEMPT: parse response to AggTradesList type
+
+		if json.Unmarshal(rawResponse, &binanceErr) != nil { // SECOND PARSE ATTEMPT: parse to binanceError type
+			return err // Parse to binanceError failed, so just return original error
+		}
+
+		fmt.Println("This is code: ", binanceErr.GetCode())
+
+		return binanceErr
+	}
+
+	return nil
+}
+
+func (e binanceError) Error() string {
+	return fmt.Sprintf("An error occured while requesting Binance API. Error code: %d, Native Binance message: %s", e.Code, e.Msg)
+}
+
+func (e binanceError) GetCode() int {
+	return e.Code
+}
+
+func (e binanceError) GetMsg() string {
+	return e.Msg
 }
