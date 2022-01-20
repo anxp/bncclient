@@ -293,7 +293,7 @@ func tryParseResponse(rawResponse []byte, structureToParseTo interface{}) error 
 			return err // Parse to binanceError failed, so just return original error
 		}
 
-		fmt.Println("This is code: ", binanceErr.GetCode())
+		fmt.Println("Binance API error: ", binanceErr.GetCode(), "(", binanceErr.GetMsg(), ")")
 
 		return binanceErr
 	}
