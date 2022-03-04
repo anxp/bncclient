@@ -7,10 +7,72 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
+	"time"
 )
 
+// RequestWeightController -- "weight counter" which accumulates total weight of requests and stops polling API when weight limit is reached.
+type RequestWeightController struct {
+	lastMinuteAccumulatedWeight int
+	timestampOfZeroOutWeightMS  int64
+	mutex                       sync.Mutex
+}
+
+// NewWeightController -- constructor of weight controller. Please note, controller should be instantiated ONLY ONCE to real control accumulative weight of requests!
+func NewWeightController() *RequestWeightController {
+	return &RequestWeightController{
+		0,
+		time.Now().Unix() * 1000,
+		sync.Mutex{},
+	}
+}
+
+func (wc *RequestWeightController) getSleepTimeAndUpdateAccumulatedWeight(requestWeight int) int64 {
+	var recommendedSleepTime int64
+	currentTimestampMS := time.Now().Unix() * 1000
+
+	(*wc).mutex.Lock()
+
+	// Current Binance weight limit per minute is 1200 but we use 999.
+	if (*wc).lastMinuteAccumulatedWeight < 999 && currentTimestampMS-(*wc).timestampOfZeroOutWeightMS < 60*1000 {
+
+		fmt.Printf("Accumulated Weight for current min [%s]: %d\n", time.Now().Format("15:04:05"), (*wc).lastMinuteAccumulatedWeight)
+
+		recommendedSleepTime = 0
+		(*wc).lastMinuteAccumulatedWeight += requestWeight
+	} else if (*wc).lastMinuteAccumulatedWeight >= 999 && currentTimestampMS-(*wc).timestampOfZeroOutWeightMS < 60*1000 {
+
+		fmt.Printf("Accumulated Weight for last 1min [%s]: %d\n", time.Now().Format("15:04:05"), (*wc).lastMinuteAccumulatedWeight)
+
+		recommendedSleepTime = 60*1000 - (currentTimestampMS - (*wc).timestampOfZeroOutWeightMS)
+
+		fmt.Printf("Recommended sleep time: %dsec\n", recommendedSleepTime/1000)
+
+		if currentTimestampMS-(*wc).timestampOfZeroOutWeightMS >= 60*1000 {
+			(*wc).lastMinuteAccumulatedWeight = requestWeight
+			(*wc).timestampOfZeroOutWeightMS = currentTimestampMS
+		}
+	} else { // If elapsed time > 1min
+
+		elapsed := (time.Now().Unix()*1000 - (*wc).timestampOfZeroOutWeightMS) / 1000
+
+		fmt.Printf("Accumulated Weight for last %dsec [%s]: %d\n", elapsed, time.Now().Format("15:04:05"), (*wc).lastMinuteAccumulatedWeight)
+
+		recommendedSleepTime = 0
+		(*wc).lastMinuteAccumulatedWeight = requestWeight
+		(*wc).timestampOfZeroOutWeightMS = currentTimestampMS
+	}
+
+	(*wc).mutex.Unlock()
+
+	return recommendedSleepTime
+}
+
+// =====================================================================================================================
+
 type BinanceClient struct {
-	apiKey string
+	apiKey           string
+	weightController *RequestWeightController
 }
 
 type oneTrade struct {
@@ -50,13 +112,14 @@ type TradesList []oneTrade
 type AggTradesList []aggTrades
 
 type binanceError struct {
-	Code int 	`json:"code"`
+	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 }
 
-func NewBinanceClient(apiKey string) *BinanceClient {
+func NewBinanceClient(apiKey string, weightController *RequestWeightController) *BinanceClient {
 	return &BinanceClient{
-		apiKey: apiKey,
+		apiKey:           apiKey,
+		weightController: weightController,
 	}
 }
 
@@ -67,7 +130,7 @@ func (bc *BinanceClient) GetServerTime() (int64, int, int, error) {
 
 	var timestampTmp ServerTimeIntermediateFormat
 
-	timestampRaw, statusCode, retryAfter, err := makeApiRequest("/api/v3/time", bc.apiKey, map[string]string{})
+	timestampRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/time", bc.apiKey, map[string]string{}, 1)
 
 	if err != nil {
 		return 0, 0, 0, err
@@ -84,16 +147,19 @@ func (bc *BinanceClient) GetServerTime() (int64, int, int, error) {
 // GetOrderBook - gets order book. Valid values for limit: [5, 10, 20, 50, 100, 500, 1000, 5000]
 // Details: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#order-book
 func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int, int, error) {
-	inArray := func(value int, heap []int) bool {
-		for i := 0; i < len(heap); i++ {
-			if heap[i] == value {
-				return true
-			}
-		}
-		return false
+	limitToWeightMap := map[int]int{
+		-1:   1,
+		5:    1,
+		10:   1,
+		20:   1,
+		50:   1,
+		100:  1,
+		500:  5,
+		1000: 10,
+		5000: 50,
 	}
 
-	if !inArray(limit, []int{-1, 5, 10, 20, 50, 100, 500, 1000, 5000}) {
+	if _, exists := limitToWeightMap[limit]; !exists {
 		panic("Not allowed limit value!")
 	}
 
@@ -111,7 +177,7 @@ func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int,
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	orderBookRaw, statusCode, retryAfter, err := makeApiRequest("/api/v3/depth", bc.apiKey, queryParams)
+	orderBookRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/depth", bc.apiKey, queryParams, limitToWeightMap[limit])
 
 	if err != nil {
 		return OrderBook{}, 0, 0, err
@@ -132,7 +198,7 @@ func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int,
 
 	orderBook.Asks = make([]struct {
 		Price float64
-		Qty float64
+		Qty   float64
 	}, len(orderBookTmp.Asks)) // len(orderBookTmp.Asks) is almost the same as "limit", but we can't rely on limit because it is optional parameter.
 
 	for i := 0; i < len(orderBookTmp.Bids); i++ {
@@ -160,7 +226,7 @@ func (bc *BinanceClient) GetRecentTrades(symbol string, limit int) (TradesList, 
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	recentTradesRaw, statusCode, retryAfter, err := makeApiRequest("/api/v3/trades", bc.apiKey, queryParams)
+	recentTradesRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/trades", bc.apiKey, queryParams, 1)
 
 	if err != nil {
 		return nil, 0, 0, err
@@ -190,7 +256,7 @@ func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId in
 		queryParams["fromId"] = strconv.FormatInt(fromId, 10)
 	}
 
-	historicalTradesRaw, statusCode, retryAfter, err := makeApiRequest("/api/v3/historicalTrades", bc.apiKey, queryParams)
+	historicalTradesRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/historicalTrades", bc.apiKey, queryParams, 5)
 
 	if err != nil {
 		return nil, 0, 0, err
@@ -208,6 +274,7 @@ func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId in
 // ATTENTION! If you don't want specify optional params - fromId, startTimeMS, endTimeMS, limit set it to -1 (not 0!)
 // So sad that Go does not have default parameters!
 func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startTimeMS int64, endTimeMS int64, limit int) (AggTradesList, int, int, error) {
+
 	var aggTrades AggTradesList
 	queryParams := make(map[string]string)
 	queryParams["symbol"] = symbol
@@ -228,7 +295,7 @@ func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startT
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	aggTradesRaw, statusCode, retryAfter, err := makeApiRequest("/api/v3/aggTrades", bc.apiKey, queryParams)
+	aggTradesRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/aggTrades", bc.apiKey, queryParams, 1)
 
 	if err != nil {
 		return nil, 0, 0, err
@@ -246,7 +313,10 @@ func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startT
 // path - is local path, like "/api/v3/trades",
 // apiKey - is your unique API key (X-MBX-APIKEY header),
 // queryParams is map with GET-parameters (map can be empty, if no GET parameters needed).
-func makeApiRequest(path string, apiKey string, queryParams map[string]string) ([]byte, int, int, error) {
+func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams map[string]string, weight int) ([]byte, int, int, error) {
+
+	time.Sleep(time.Duration((*(bc.weightController)).getSleepTimeAndUpdateAccumulatedWeight(weight)) * time.Millisecond)
+
 	requestUrl := url.URL{}
 	requestUrl.Scheme = "https"
 	requestUrl.Host = "api.binance.com"
