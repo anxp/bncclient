@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+// ========================================== REQUEST WEIGHT CONTROLLER ================================================
+
 // RequestWeightController -- "weight counter" which accumulates total weight of requests and stops polling API when weight limit is reached.
 type RequestWeightController struct {
 	lastMinuteAccumulatedWeight int
