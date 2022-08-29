@@ -62,30 +62,32 @@ func NewBinanceClient(apiKey string) *BinanceClient {
 	}
 }
 
-func (bc *BinanceClient) GetServerTime() (int64, int, int64, error) {
+func (bc *BinanceClient) GetServerTime() (int64, int64, error, error) {
 	type ServerTimeIntermediateFormat struct {
 		ServerTime int64 `json:"serverTime"`
 	}
 
 	var timestampTmp ServerTimeIntermediateFormat
 
-	timestampRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/time", bc.apiKey, map[string]string{}, 1)
+	timestampRaw, retryAfter, warning, err := (*bc).makeApiRequest("/api/v3/time", bc.apiKey, map[string]string{}, 1)
 
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, nil, err
+	}
+
+	if warning != nil {
+		return 0, retryAfter, warning, nil
 	}
 
 	// Try to parse JSON and return error if it is:
-	if err := json.Unmarshal(timestampRaw, &timestampTmp); err != nil {
-		return 0, 0, 0, err
-	}
+	error := bc.tryParseResponse(timestampRaw, &timestampTmp)
 
-	return timestampTmp.ServerTime, statusCode, retryAfter, nil
+	return timestampTmp.ServerTime, retryAfter, nil, error
 }
 
 // GetOrderBook - gets order book. Valid values for limit: [5, 10, 20, 50, 100, 500, 1000, 5000]
 // Details: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#order-book
-func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int, int64, error) {
+func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int64, error, error) {
 	limitToWeightMap := map[int]int{
 		-1:   1,
 		5:    1,
@@ -116,15 +118,19 @@ func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int,
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	orderBookRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/depth", bc.apiKey, queryParams, limitToWeightMap[limit])
+	orderBookRaw, retryAfter, warning, err := (*bc).makeApiRequest("/api/v3/depth", bc.apiKey, queryParams, limitToWeightMap[limit])
 
 	if err != nil {
-		return OrderBook{}, 0, 0, err
+		return OrderBook{}, 0, nil, err
+	}
+
+	if warning != nil {
+		return OrderBook{}, retryAfter, warning, nil
 	}
 
 	// Try to parse JSON and return error if it is:
-	if err := tryParseResponse(orderBookRaw, &orderBookTmp); err != nil {
-		return OrderBook{}, 0, 0, err
+	if err := bc.tryParseResponse(orderBookRaw, &orderBookTmp); err != nil {
+		return OrderBook{}, 0, nil, err
 	}
 
 	var orderBook OrderBook // The final version of order book, which we will return.
@@ -150,13 +156,13 @@ func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, int,
 		orderBook.Asks[i].Qty, _ = orderBookTmp.Asks[i][1].Float64()
 	}
 
-	return orderBook, statusCode, retryAfter, nil
+	return orderBook, retryAfter, nil, nil
 }
 
 // GetRecentTrades - Get recent trades.
 // Details: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#recent-trades-list
 // Parameter limit is optional, set it to -1 if you don't want to specify it.
-func (bc *BinanceClient) GetRecentTrades(symbol string, limit int) (TradesList, int, int64, error) {
+func (bc *BinanceClient) GetRecentTrades(symbol string, limit int) (TradesList, int64, error, error) {
 	var recentTrades TradesList
 	queryParams := make(map[string]string)
 	queryParams["symbol"] = symbol
@@ -165,24 +171,25 @@ func (bc *BinanceClient) GetRecentTrades(symbol string, limit int) (TradesList, 
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	recentTradesRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/trades", bc.apiKey, queryParams, 1)
+	recentTradesRaw, retryAfter, warning, err := (*bc).makeApiRequest("/api/v3/trades", bc.apiKey, queryParams, 1)
 
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, nil, err
 	}
 
-	// Try to parse JSON and return error if it is:
-	if err := tryParseResponse(recentTradesRaw, &recentTrades); err != nil {
-		return nil, 0, 0, err
+	if warning != nil {
+		return nil, retryAfter, warning, nil
 	}
 
-	return recentTrades, statusCode, retryAfter, nil
+	error := bc.tryParseResponse(recentTradesRaw, &recentTrades)
+
+	return recentTrades, retryAfter, nil, error
 }
 
 // GetHistoricalTrades - Get older trades.
 // Details: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#old-trade-lookup-market_data
 // Parameters limit and fromId are optional, if you don't want to specify them, set them to -1
-func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId int64) (TradesList, int, int64, error) {
+func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId int64) (TradesList, int64, error, error) {
 	var historicalTrades TradesList
 	queryParams := make(map[string]string)
 	queryParams["symbol"] = symbol
@@ -195,24 +202,26 @@ func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId in
 		queryParams["fromId"] = strconv.FormatInt(fromId, 10)
 	}
 
-	historicalTradesRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/historicalTrades", bc.apiKey, queryParams, 5)
+	historicalTradesRaw, retryAfter, warning, err := (*bc).makeApiRequest("/api/v3/historicalTrades", bc.apiKey, queryParams, 5)
 
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, nil, err
 	}
 
-	if err := tryParseResponse(historicalTradesRaw, &historicalTrades); err != nil {
-		return nil, 0, 0, err
+	if warning != nil {
+		return nil, retryAfter, warning, nil
 	}
 
-	return historicalTrades, statusCode, retryAfter, nil
+	error := bc.tryParseResponse(historicalTradesRaw, &historicalTrades)
+
+	return historicalTrades, retryAfter, nil, error
 }
 
 // GetAggregatedTrades - Get compressed, aggregate trades. Trades that fill at the time, from the same taker order, with the same price will have the quantity aggregated.
 // Details: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#compressedaggregate-trades-list
 // ATTENTION! If you don't want specify optional params - fromId, startTimeMS, endTimeMS, limit set it to -1 (not 0!)
 // So sad that Go does not have default parameters!
-func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startTimeMS int64, endTimeMS int64, limit int) (AggTradesList, int, int64, error) {
+func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startTimeMS int64, endTimeMS int64, limit int) (AggTradesList, int64, error, error) {
 
 	var aggTrades AggTradesList
 	queryParams := make(map[string]string)
@@ -234,27 +243,32 @@ func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startT
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	aggTradesRaw, statusCode, retryAfter, err := (*bc).makeApiRequest("/api/v3/aggTrades", bc.apiKey, queryParams, 1)
+	aggTradesRaw, retryAfter, warning, err := (*bc).makeApiRequest("/api/v3/aggTrades", bc.apiKey, queryParams, 1)
 
 	if err != nil {
-		return nil, 0, 0, err
+		return nil, 0, nil, err
 	}
 
-	if err := tryParseResponse(aggTradesRaw, &aggTrades); err != nil {
-		fmt.Println("Parsing response failed. RAW response here:")
-		fmt.Println(string(aggTradesRaw))
-		return nil, 0, 0, err
+	if warning != nil {
+		return nil, retryAfter, warning, nil
 	}
 
-	return aggTrades, statusCode, retryAfter, nil
+	error := bc.tryParseResponse(aggTradesRaw, &aggTrades)
+
+	return aggTrades, retryAfter, nil, error
 }
 
-// Creates API request and performs it.
+// makeApiRequest creates API request and performs it.
 // Returns raw (not parsed) response (as slice of bytes), status code, recommended sleep time (ms) and error.
 // path - is local path, like "/api/v3/trades",
 // apiKey - is your unique API key (X-MBX-APIKEY header),
 // queryParams is map with GET-parameters (map can be empty, if no GET parameters needed).
-func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams map[string]string, weight int) ([]byte, int, int64, error) {
+// Returned parameters:
+// 1. Raw response (bytes)
+// 2. Recommended sleep time (MS)
+// 3. Warning - when calling functionality should wait some time to ot spam the API
+// 4. Error - when something went bad.
+func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams map[string]string, weight int) ([]byte, int64, error, error) {
 
 	requestUrl := url.URL{}
 	requestUrl.Scheme = "https"
@@ -269,54 +283,53 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 		requestUrl.RawQuery = query.Encode()
 	}
 
-	client := &http.Client{}
-	request, _ := http.NewRequest("GET", requestUrl.String(), nil)
-
-	request.Header.Set("X-MBX-APIKEY", apiKey)
-	rawResponse, err := client.Do(request)
-
-	if err != nil {
-		// Maybe temporary network error:
-		return nil, rawResponse.StatusCode, 0, err
+	// !!!BEFORE!!! polling the API, check accumulated weight and recommended sleep time (if it is):
+	sleepTimeMS := bc.weightController.getSleepTime(weight) // Should be called only once per function call, because it's atomic counter!
+	if sleepTimeMS > 0 {
+		warning := newWaring(fmt.Sprintf("Request limit reached. We should sleep %d sec to avoid abuse Binance API.\n", sleepTimeMS/1000))
+		return nil, sleepTimeMS, warning, nil
 	}
 
+	// ==================== THE CRITICAL POINT - REQUEST TO REMOTE API =================================================
+	client := &http.Client{}
+	request, _ := http.NewRequest("GET", requestUrl.String(), nil)
+	request.Header.Set("X-MBX-APIKEY", apiKey)
+	rawResponse, err := client.Do(request)
 	defer rawResponse.Body.Close()
+	// =================================================================================================================
+
+	if err != nil {
+		// Maybe temporary network error (maybe print HTTP Code?):
+		return nil, 0, nil, err
+	}
 
 	bodyBytes, err := ioutil.ReadAll(rawResponse.Body)
+
 	if err != nil {
-		return nil, rawResponse.StatusCode, 0, err
+		return nil, 0, nil, err
 	}
 
 	retryAfter, _ := strconv.Atoi(rawResponse.Header.Get("Retry-After")) // seconds!
 	retryAfterMS := int64(retryAfter * 1000)
-	sleepTimeMS := bc.weightController.getSleepTime(weight) // Should be called only once per function call, because it's atomic counter!
 
-	if rawResponse.StatusCode == 429 {
-		fmt.Printf("Error 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter)
+
+	if rawResponse.StatusCode == 429 && retryAfterMS > 0 {
+		fmt.Printf("WARNING: Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter)
+		warning := newWaring(fmt.Sprintf("Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter))
+		return nil, retryAfterMS, warning, nil
 	}
 
-	max := func(value1 int64, value2 int64) int64 {
-		if value1 > value2 {
-			return value1
-		}
-		return value2
-	}
-
-	return bodyBytes, rawResponse.StatusCode, max(retryAfterMS, sleepTimeMS), nil
+	return bodyBytes, retryAfterMS, nil, nil
 }
 
-func tryParseResponse(rawResponse []byte, structureToParseTo interface{}) error {
+func (bc *BinanceClient) tryParseResponse(rawResponse []byte, pointerToTargetStructure interface{}) error {
 
 	var binanceErr binanceError
 
-	if err := json.Unmarshal(rawResponse, structureToParseTo); err != nil { // FIRST PARSE ATTEMPT: parse response to AggTradesList type
-
+	if err := json.Unmarshal(rawResponse, pointerToTargetStructure); err != nil { // FIRST PARSE ATTEMPT: parse response to AggTradesList type
 		if json.Unmarshal(rawResponse, &binanceErr) != nil { // SECOND PARSE ATTEMPT: parse to binanceError type
 			return err // Parse to binanceError failed, so just return original error
 		}
-
-		fmt.Println("Binance API error: ", binanceErr.GetCode(), "(", binanceErr.GetMsg(), ")")
-
 		return binanceErr
 	}
 

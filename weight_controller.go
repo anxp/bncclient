@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const weightLimitPerMinute = 1000 // Current Binance weight limit per minute is 1200, but we use 1100
+const weightLimitPerMinute = 1200 // Current Binance weight limit per minute is 1200
 const sessionDurationMS = 60 * 1000
 
 // weightController -- "weight counter" which accumulates total weight of requests and stops polling API when weight limit is reached.
