@@ -1,7 +1,6 @@
 package bncclient
 
 import (
-	"fmt"
 	"sync"
 	"time"
 )
@@ -46,14 +45,14 @@ func (wcInstance *weightController) getSleepTime(requestWeight int) int64 {
 
 	if (*wcInstance).lastMinuteAccumulatedWeight < weightLimitPerMinute && elapsedTimeMS <= sessionDurationMS {
 		(*wcInstance).lastMinuteAccumulatedWeight += requestWeight
-		fmt.Printf("Accumulated Weight for current min [%s]: %d\n", time.Now().Format("15:04:05"), (*wcInstance).lastMinuteAccumulatedWeight)
+		//fmt.Printf("Accumulated Weight for current min [%s]: %d\n", time.Now().Format("15:04:05"), (*wcInstance).lastMinuteAccumulatedWeight)
 	} else if (*wcInstance).lastMinuteAccumulatedWeight >= weightLimitPerMinute && elapsedTimeMS <= sessionDurationMS {
 		recommendedSleepTime = sessionDurationMS - elapsedTimeMS
-		fmt.Printf("Accumulated Weight for current min [%s] is FULL: %d, recommended sleep time: %dsec\n", time.Now().Format("15:04:05"), (*wcInstance).lastMinuteAccumulatedWeight, recommendedSleepTime/1000)
+		//fmt.Printf("Accumulated Weight for current min [%s] is FULL: %d, recommended sleep time: %dsec\n", time.Now().Format("15:04:05"), (*wcInstance).lastMinuteAccumulatedWeight, recommendedSleepTime/1000)
 	} else { // If elapsed time > 1min
 		(*wcInstance).lastMinuteAccumulatedWeight = requestWeight
 		(*wcInstance).timestampOfZeroOutWeightMS = currentTimestampMS
-		fmt.Printf("NEW 1-MIN REQUEST SESSION STARTED.\n")
+		//fmt.Printf("NEW 1-MIN REQUEST SESSION STARTED.\n")
 	}
 
 	return recommendedSleepTime

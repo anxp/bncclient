@@ -1,13 +1,23 @@
 package bncclient
 
-func newWaring(message string) error {
-	return &warning{message: message}
+type warning interface {
+	Error() string
+	GetRetryAfterTimeMS() int64
 }
 
-type warning struct {
-	message string
+func newWaring(retryAfter int64, message string) warning {
+	return warningSt{retryAfter: retryAfter, message: message}
 }
 
-func (w *warning) Error() string { // warning structure implementing "error" interface
-	return (*w).message
+type warningSt struct {
+	retryAfter int64
+	message    string
+}
+
+func (w warningSt) Error() string { // warning structure implementing "error" interface
+	return w.message
+}
+
+func (w warningSt) GetRetryAfterTimeMS() int64 {
+	return w.retryAfter
 }
