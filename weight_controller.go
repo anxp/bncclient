@@ -19,7 +19,7 @@ var wcInstance *weightController
 var lock = &sync.Mutex{}
 
 // getWeightControllerSingleton -- constructor of weight controller. Designed as singleton.
-// TODO: Refactor accoding to https://medium.com/golang-issue/how-singleton-pattern-works-with-golang-2fdd61cd5a7f
+// TODO: Refactor according to https://medium.com/golang-issue/how-singleton-pattern-works-with-golang-2fdd61cd5a7f
 func getWeightControllerSingleton() *weightController {
 	lock.Lock()
 	defer lock.Unlock()

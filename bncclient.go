@@ -15,7 +15,7 @@ type BinanceClient struct {
 	weightController *weightController
 }
 
-type oneTrade struct {
+type OneTrade struct {
 	Id           int64   `json:"id"`
 	Price        float64 `json:"price,string"`
 	Qty          float64 `json:"qty,string"`
@@ -25,7 +25,7 @@ type oneTrade struct {
 	IsBestMatch  bool    `json:"isBestMatch"`
 }
 
-type aggTrades struct {
+type AggTrade struct {
 	AggTradeId      int64   `json:"a"`
 	AggPrice        float64 `json:"p,string"`
 	AggQty          float64 `json:"q,string"`
@@ -48,8 +48,8 @@ type OrderBook struct {
 	}
 }
 
-type TradesList []oneTrade
-type AggTradesList []aggTrades
+type TradesList []OneTrade
+type AggTradesList []AggTrade
 
 type binanceError struct {
 	Code int    `json:"code"`
