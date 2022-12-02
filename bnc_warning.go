@@ -1,11 +1,11 @@
 package bncclient
 
-type warning interface {
+type Warning interface {
 	Error() string
 	GetRetryAfterTimeMS() int64
 }
 
-func newWaring(retryAfter int64, message string) warning {
+func newWaring(retryAfter int64, message string) Warning {
 	return warningSt{retryAfter: retryAfter, message: message}
 }
 
