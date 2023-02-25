@@ -339,7 +339,8 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 
 	case rawResponse.StatusCode == 429:
 		retryAfter, _ := strconv.Atoi(rawResponse.Header.Get("Retry-After")) // seconds!
-		fmt.Printf("WARNING: Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter)
+		// Receiving error 429 is a normal situation, so we don't want to put it out on the screen.
+		//fmt.Printf("WARNING: Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter)
 		warning := newWaring(int64(retryAfter*1000), fmt.Sprintf("Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter))
 		return nil, warning, nil
 
