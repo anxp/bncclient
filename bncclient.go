@@ -326,7 +326,7 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 
 	switch true {
 	case len(bodyBytes) <= 2 && rawResponse.StatusCode == 200:
-		warning := newWaring(5*60*1000, fmt.Sprintf("No new data. Try again later (~5min).\n"))
+		warning := newWaring(5*60*1000, fmt.Sprintf("No new data for request:\n%s\nTry again later (~5min).\n", requestUrl.RawQuery))
 		return nil, warning, nil
 
 	case rawResponse.StatusCode == 403:
