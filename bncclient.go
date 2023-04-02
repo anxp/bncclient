@@ -325,10 +325,6 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 	}
 
 	switch true {
-	case len(bodyBytes) <= 2 && rawResponse.StatusCode == 200:
-		warning := newWaring(5*60*1000, fmt.Sprintf("No new data for request:\n%s\nTry again later (~5min).\n", requestUrl.RawQuery))
-		return nil, warning, nil
-
 	case rawResponse.StatusCode == 403:
 		// HTTP 403 return code is used when the WAF Limit (Web Application Firewall) has been violated.
 		// So let's just wait a 5 minute and try again.
