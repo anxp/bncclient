@@ -311,7 +311,7 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 
 	// In this case error is not critical, usually it occurs because of network failure
 	if err != nil {
-		warning := newWaring(60*1000, "Temporary network problem. Will try again in 1min.")
+		warning := newWaring(60*1000, "Temporary network problem. Try again later (~1min)")
 		return nil, warning, nil
 	}
 
@@ -329,7 +329,7 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 		// HTTP 403 return code is used when the WAF Limit (Web Application Firewall) has been violated.
 		// So let's just wait a 5 minute and try again.
 		// TODO: Write RAW response to LOG file!
-		warning := newWaring(5*60*1000, fmt.Sprintf("Status Code 403 received. Usually it's CloudFront error.\n"))
+		warning := newWaring(5*60*1000, fmt.Sprintf("WAF limit violated (code 403). Try again later (~5min)\n"))
 		return nil, warning, nil
 
 	case rawResponse.StatusCode == 429: // Receiving error 429 is a request from API to wait some time.
