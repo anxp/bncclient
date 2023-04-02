@@ -333,14 +333,11 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 		// HTTP 403 return code is used when the WAF Limit (Web Application Firewall) has been violated.
 		// So let's just wait a 5 minute and try again.
 		// TODO: Write RAW response to LOG file!
-		fmt.Printf("Error 403 received. RAW error message: %s\n", string(bodyBytes))
 		warning := newWaring(5*60*1000, fmt.Sprintf("Status Code 403 received. Usually it's CloudFront error.\n"))
 		return nil, warning, nil
 
-	case rawResponse.StatusCode == 429:
+	case rawResponse.StatusCode == 429: // Receiving error 429 is a request from API to wait some time.
 		retryAfter, _ := strconv.Atoi(rawResponse.Header.Get("Retry-After")) // seconds!
-		// Receiving error 429 is a normal situation, so we don't want to put it out on the screen.
-		//fmt.Printf("WARNING: Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter)
 		warning := newWaring(int64(retryAfter*1000), fmt.Sprintf("Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter))
 		return nil, warning, nil
 
@@ -351,7 +348,6 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 
 	case rawResponse.StatusCode != 200:
 		// TODO: Write RAW response to LOG file!
-		fmt.Printf("UNKNOWN ERROR: Status Code %d received. RAW error message: %s\n", rawResponse.StatusCode, string(bodyBytes))
 		return nil, nil, errors.New(fmt.Sprintf("UNKNOWN ERROR: Status Code %d received. RAW error message: %s\n", rawResponse.StatusCode, string(bodyBytes)))
 
 	default:
