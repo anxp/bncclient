@@ -311,17 +311,12 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 
 	// In this case error is not critical, usually it occurs because of network failure
 	if err != nil {
-		warning := newWaring(10*1000, "Temporary network problem. Try again later.")
+		warning := newWaring(60*1000, "Temporary network problem. Will try again in 1min.")
 		return nil, warning, nil
 	}
 
 	defer rawResponse.Body.Close()
 	// =================================================================================================================
-
-	if err != nil {
-		// Maybe temporary network error (maybe print HTTP Code?):
-		return nil, nil, err
-	}
 
 	bodyBytes, err := ioutil.ReadAll(rawResponse.Body)
 
@@ -331,10 +326,11 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 
 	switch true {
 	case rawResponse.StatusCode == 403:
-		// Most likely we have CloudFront error here, NOT a Binance error! So let's just wait a minute and try again.
+		// HTTP 403 return code is used when the WAF Limit (Web Application Firewall) has been violated.
+		// So let's just wait a 5 minute and try again.
 		// TODO: Write RAW response to LOG file!
 		fmt.Printf("Error 403 received. RAW error message: %s\n", string(bodyBytes))
-		warning := newWaring(60*1000, fmt.Sprintf("Status Code 403 received. Usually it's CloudFront error.\n"))
+		warning := newWaring(5*60*1000, fmt.Sprintf("Status Code 403 received. Usually it's CloudFront error.\n"))
 		return nil, warning, nil
 
 	case rawResponse.StatusCode == 429:
@@ -342,6 +338,11 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 		// Receiving error 429 is a normal situation, so we don't want to put it out on the screen.
 		//fmt.Printf("WARNING: Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter)
 		warning := newWaring(int64(retryAfter*1000), fmt.Sprintf("Status Code 429 received. Binance API ask to wait %d seconds to avoid ban!\n", retryAfter))
+		return nil, warning, nil
+
+	case rawResponse.StatusCode == 418: // Congratulations, we are banned! Let's wait recommended time + 1H (for reinsurance)
+		retryAfter, _ := strconv.Atoi(rawResponse.Header.Get("Retry-After")) // seconds!
+		warning := newWaring(int64(retryAfter*1000+60*60*1000), fmt.Sprintf("Status Code 418 received. We are banned for %d seconds!\n", retryAfter))
 		return nil, warning, nil
 
 	case rawResponse.StatusCode != 200:
