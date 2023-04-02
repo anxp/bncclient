@@ -324,6 +324,10 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 		return nil, nil, err
 	}
 
+	if len(bodyBytes) <= 2 {
+		return nil, nil, fmt.Errorf("Binance responded with empty body.\nProblem request: %s\n", requestUrl.RawQuery)
+	}
+
 	switch true {
 	case rawResponse.StatusCode == 403:
 		// HTTP 403 return code is used when the WAF Limit (Web Application Firewall) has been violated.
