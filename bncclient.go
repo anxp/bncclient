@@ -70,7 +70,7 @@ func (bc *BinanceClient) GetServerTime() (int64, Warning, error) {
 
 	var timestampTmp ServerTimeIntermediateFormat
 
-	timestampRaw, warning, err := (*bc).makeApiRequest("/api/v3/time", bc.apiKey, map[string]string{}, 1)
+	timestampRaw, warning, err := bc.makeApiRequest("/api/v3/time", bc.apiKey, map[string]string{}, 1)
 
 	if err != nil {
 		return 0, nil, err
@@ -121,7 +121,7 @@ func (bc *BinanceClient) GetOrderBook(symbol string, limit int) (OrderBook, Warn
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	orderBookRaw, warning, err := (*bc).makeApiRequest("/api/v3/depth", bc.apiKey, queryParams, limitToWeightMap[limit])
+	orderBookRaw, warning, err := bc.makeApiRequest("/api/v3/depth", bc.apiKey, queryParams, limitToWeightMap[limit])
 
 	if err != nil {
 		return OrderBook{}, nil, err
@@ -174,7 +174,7 @@ func (bc *BinanceClient) GetRecentTrades(symbol string, limit int) (TradesList, 
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	recentTradesRaw, warning, err := (*bc).makeApiRequest("/api/v3/trades", bc.apiKey, queryParams, 1)
+	recentTradesRaw, warning, err := bc.makeApiRequest("/api/v3/trades", bc.apiKey, queryParams, 1)
 
 	if err != nil {
 		return nil, nil, err
@@ -207,7 +207,7 @@ func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId in
 		queryParams["fromId"] = strconv.FormatInt(fromId, 10)
 	}
 
-	historicalTradesRaw, warning, err := (*bc).makeApiRequest("/api/v3/historicalTrades", bc.apiKey, queryParams, 5)
+	historicalTradesRaw, warning, err := bc.makeApiRequest("/api/v3/historicalTrades", bc.apiKey, queryParams, 5)
 
 	if err != nil {
 		return nil, nil, err
@@ -226,7 +226,7 @@ func (bc *BinanceClient) GetHistoricalTrades(symbol string, limit int, fromId in
 
 // GetAggregatedTrades - Get compressed, aggregate trades. Trades that fill at the time, from the same taker order, with the same price will have the quantity aggregated.
 // Details: https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md#compressedaggregate-trades-list
-// ATTENTION! If you don't want specify optional params - fromId, startTimeMS, endTimeMS, limit set it to -1 (not 0!)
+// ATTENTION! If you don't want to specify optional params - fromId, startTimeMS, endTimeMS, limit set it to -1 (not 0!)
 // So sad that Go does not have default parameters!
 func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startTimeMS int64, endTimeMS int64, limit int) (AggTradesList, Warning, error) {
 
@@ -250,7 +250,7 @@ func (bc *BinanceClient) GetAggregatedTrades(symbol string, fromId int64, startT
 		queryParams["limit"] = strconv.Itoa(limit)
 	}
 
-	aggTradesRaw, warning, err := (*bc).makeApiRequest("/api/v3/aggTrades", bc.apiKey, queryParams, 1)
+	aggTradesRaw, warning, err := bc.makeApiRequest("/api/v3/aggTrades", bc.apiKey, queryParams, 1)
 
 	if err != nil {
 		return nil, nil, err
