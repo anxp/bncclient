@@ -342,6 +342,11 @@ func (bc *BinanceClient) makeApiRequest(path string, apiKey string, queryParams 
 		warning := newWaring(int64(retryAfter*1000+60*60*1000), fmt.Sprintf("Status Code 418 received. We are banned for %d seconds!\n", retryAfter))
 		return nil, warning, nil
 
+	case rawResponse.StatusCode == 504:
+		// This is "504 Gateway Time-out" error. Let's try later.
+		warning := newWaring(5*60*1000, fmt.Sprintf("Gateway Time-out (code 504). Try again later (~5min)\n"))
+		return nil, warning, nil
+
 	case rawResponse.StatusCode != 200:
 		// TODO: Write RAW response to LOG file!
 		return nil, nil, errors.New(fmt.Sprintf("UNKNOWN ERROR: Status Code %d received. RAW error message: %s\n", rawResponse.StatusCode, string(bodyBytes)))
